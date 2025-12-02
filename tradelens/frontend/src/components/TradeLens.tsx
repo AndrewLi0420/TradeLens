@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Area, AreaChart } from 'recharts';
 import { TrendingUp, TrendingDown, Search, Brain, Activity, BarChart3, Sparkles, RefreshCw, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
 
@@ -803,7 +804,7 @@ const TradeLens = () => {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <BarChart3 className="w-8 h-8" />
+              <Image src="/tradelens-logo.png" alt="TradeLens Logo" width={32} height={32} />
               <h1 className="text-2xl font-bold">TradeLens</h1>
               <span className="text-sm bg-white/20 px-2 py-1 rounded">Quant EdTech</span>
             </div>

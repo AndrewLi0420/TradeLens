@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+.venv/
+*.log
+.pytest_cache/
+
+# Next.js
+.next/
+out/
+
+# System files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+

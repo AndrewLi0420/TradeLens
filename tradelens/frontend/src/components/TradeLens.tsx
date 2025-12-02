@@ -75,6 +75,7 @@ const TradeLens = () => {
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [watchlistPrices, setWatchlistPrices] = useState<Record<string, { price: number; change: number }>>({});
+  const [watchlistFundamentals, setWatchlistFundamentals] = useState<Record<string, { sector: string; industry: string }>>({});
   
   // Loading States
   const [loadingMarket, setLoadingMarket] = useState(true);
@@ -193,6 +194,39 @@ const TradeLens = () => {
     setLoadingWatchlist(false);
   }, [watchlist]);
 
+  // Fetch watchlist fundamentals (sector/industry for each stock)
+  const fetchWatchlistFundamentals = useCallback(async () => {
+    const results = await Promise.all(
+      watchlist.map(async (ticker) => {
+        try {
+          const response = await fetch(`${API_BASE}/api/stock/${ticker}/fundamentals`);
+          if (response.ok) {
+            const data = await response.json();
+            return { 
+              ticker, 
+              sector: data.sector || 'Unknown', 
+              industry: data.industry || 'Unknown' 
+            };
+          }
+        } catch (err) {
+          console.error(`Failed to fetch fundamentals for ${ticker}:`, err);
+        }
+        return null;
+      })
+    );
+    
+    const newData: Record<string, { sector: string; industry: string }> = {};
+    results.forEach(result => {
+      if (result) {
+        newData[result.ticker] = { sector: result.sector, industry: result.industry };
+      }
+    });
+    
+    if (Object.keys(newData).length > 0) {
+      setWatchlistFundamentals(prev => ({ ...prev, ...newData }));
+    }
+  }, [watchlist]);
+
   // Run ML prediction
   const runPrediction = async (ticker: string, modelType: string, features: string[], window: string) => {
     setLoadingPrediction(true);
@@ -226,11 +260,12 @@ const TradeLens = () => {
   useEffect(() => {
     fetchMarketOverview();
     fetchWatchlistPrices();
+    fetchWatchlistFundamentals();
     
     // Refresh market data every 60 seconds
     const interval = setInterval(fetchMarketOverview, 60000);
     return () => clearInterval(interval);
-  }, [fetchMarketOverview, fetchWatchlistPrices]);
+  }, [fetchMarketOverview, fetchWatchlistPrices, fetchWatchlistFundamentals]);
 
   // Fetch stock data when selection changes
   useEffect(() => {
@@ -289,64 +324,170 @@ const TradeLens = () => {
     </div>
   );
 
-  const Watchlist = () => (
-    <div className="bg-white rounded-lg shadow p-6 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold">My Watchlist</h3>
-        <button 
-          onClick={fetchWatchlistPrices} 
-          className="p-2 hover:bg-gray-100 rounded-full transition"
-          disabled={loadingWatchlist}
-        >
-          <RefreshCw className={`w-4 h-4 text-gray-600 ${loadingWatchlist ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
-      <div className="space-y-3">
-        {watchlist.map((ticker) => {
-          const priceInfo = watchlistPrices[ticker];
-          return (
-            <div
-              key={ticker}
-              onClick={() => {
-                setSelectedStock(ticker);
-                setActiveView('stock-detail');
-              }}
-              className="flex items-center justify-between p-3 hover:bg-gray-50 rounded cursor-pointer transition"
-            >
-              <div className="flex items-center">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold mr-3">
-                  {ticker[0]}
-                </div>
-                <div>
-                  <div className="font-semibold">{ticker}</div>
-                  <div className="text-sm text-gray-500">
-                    {fundamentals?.ticker === ticker ? fundamentals.sector : 'Loading...'}
+  const Watchlist = () => {
+    const [isAddingStock, setIsAddingStock] = useState(false);
+    const [newStockTicker, setNewStockTicker] = useState('');
+    const [addStockError, setAddStockError] = useState<string | null>(null);
+
+    const handleAddStock = async (inputValue?: string) => {
+      const ticker = (inputValue || newStockTicker).toUpperCase().trim();
+      
+      if (!ticker) {
+        setAddStockError('Please enter a ticker symbol');
+        return;
+      }
+      
+      if (watchlist.includes(ticker)) {
+        setAddStockError('Stock already in watchlist');
+        return;
+      }
+
+      // Validate the ticker by trying to fetch its price
+      try {
+        const response = await fetch(`${API_BASE}/api/stock/${ticker}/price?range=1d`);
+        if (!response.ok) {
+          setAddStockError('Invalid ticker symbol');
+          return;
+        }
+        
+        // Add to watchlist
+        setWatchlist([...watchlist, ticker]);
+        setNewStockTicker('');
+        setIsAddingStock(false);
+        setAddStockError(null);
+        
+        // Fetch price and fundamentals for the new stock
+        fetchWatchlistPrices();
+        fetchWatchlistFundamentals();
+      } catch (err) {
+        setAddStockError('Failed to validate ticker');
+      }
+    };
+
+    const handleRemoveStock = (tickerToRemove: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setWatchlist(watchlist.filter(t => t !== tickerToRemove));
+    };
+
+    return (
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold">My Watchlist</h3>
+          <button 
+            onClick={fetchWatchlistPrices} 
+            className="p-2 hover:bg-gray-100 rounded-full transition"
+            disabled={loadingWatchlist}
+          >
+            <RefreshCw className={`w-4 h-4 text-gray-600 ${loadingWatchlist ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+        <div className="space-y-3">
+          {watchlist.map((ticker) => {
+            const priceInfo = watchlistPrices[ticker];
+            return (
+              <div
+                key={ticker}
+                onClick={() => {
+                  setSelectedStock(ticker);
+                  setActiveView('stock-detail');
+                }}
+                className="flex items-center justify-between p-3 hover:bg-gray-50 rounded cursor-pointer transition group"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold mr-3">
+                    {ticker[0]}
+                  </div>
+                  <div>
+                    <div className="font-semibold">{ticker}</div>
+                    <div className="text-sm text-gray-500">
+                      {watchlistFundamentals[ticker]?.industry || watchlistFundamentals[ticker]?.sector || 'Loading...'}
+                    </div>
                   </div>
                 </div>
+                <div className="flex items-center">
+                  <div className="text-right mr-2">
+                    {loadingWatchlist && !priceInfo ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    ) : priceInfo ? (
+                      <>
+                        <div className="font-semibold">${priceInfo.price.toFixed(2)}</div>
+                        <div className={`text-sm ${priceInfo.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {priceInfo.change >= 0 ? '+' : ''}{priceInfo.change.toFixed(2)}%
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-gray-400 text-sm">--</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => handleRemoveStock(ticker, e)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition text-gray-400 hover:text-red-500"
+                    title="Remove from watchlist"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div className="text-right">
-                {loadingWatchlist && !priceInfo ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                ) : priceInfo ? (
-                  <>
-                    <div className="font-semibold">${priceInfo.price.toFixed(2)}</div>
-                    <div className={`text-sm ${priceInfo.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {priceInfo.change >= 0 ? '+' : ''}{priceInfo.change.toFixed(2)}%
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-gray-400 text-sm">--</span>
-                )}
-              </div>
+            );
+          })}
+        </div>
+        
+        {isAddingStock ? (
+          <div className="mt-4 space-y-2">
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                value={newStockTicker}
+                onChange={(e) => {
+                  setNewStockTicker(e.target.value.toUpperCase());
+                  setAddStockError(null);
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddStock((e.target as HTMLInputElement).value);
+                  }
+                }}
+                placeholder="Enter ticker (e.g., GOOGL)"
+                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                autoFocus
+              />
+              <button
+                onClick={handleAddStock}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+              >
+                Add
+              </button>
+              <button
+                onClick={() => {
+                  setIsAddingStock(false);
+                  setNewStockTicker('');
+                  setAddStockError(null);
+                }}
+                className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm"
+              >
+                Cancel
+              </button>
             </div>
-          );
-        })}
+            {addStockError && (
+              <p className="text-sm text-red-500 flex items-center">
+                <AlertCircle className="w-3 h-3 mr-1" />
+                {addStockError}
+              </p>
+            )}
+          </div>
+        ) : (
+          <button 
+            onClick={() => setIsAddingStock(true)}
+            className="w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition"
+          >
+            + Add Stock
+          </button>
+        )}
       </div>
-      <button className="w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-gray-400 hover:text-gray-700 transition">
-        + Add Stock
-      </button>
-    </div>
-  );
+    );
+  };
 
   const StockChart = () => (
     <div className="bg-white rounded-lg shadow p-6 mb-6">

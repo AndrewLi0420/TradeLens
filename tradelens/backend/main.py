@@ -10,6 +10,11 @@ from datetime import datetime, timedelta
 import asyncio
 from functools import lru_cache
 import logging
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # ML imports
 from sklearn.ensemble import RandomForestRegressor
@@ -25,10 +30,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="TradeLens API", version="1.0.0")
 
-# CORS configuration
+# CORS configuration - allow all origins for public API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

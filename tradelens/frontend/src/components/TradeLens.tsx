@@ -197,6 +197,12 @@ const TradeLens = () => {
   const [loadingSentiment, setLoadingSentiment] = useState(false);
   const [loadingWatchlist, setLoadingWatchlist] = useState(true);
 
+  // ML Sandbox State (lifted to prevent reset on parent re-render)
+  const [sandboxFeatures, setSandboxFeatures] = useState(['ma_20', 'rsi', 'volatility']);
+  const [sandboxModelType, setSandboxModelType] = useState('random_forest');
+  const [sandboxWindow, setSandboxWindow] = useState('1w');
+  const [sandboxTicker, setSandboxTicker] = useState(selectedStock || 'AAPL');
+
   // Error States
   const [error, setError] = useState<string | null>(null);
 
@@ -1116,10 +1122,15 @@ const TradeLens = () => {
 
   // ML Prediction Sandbox - Enhanced
   const MLPredictionSandbox = () => {
-    const [selectedFeatures, setSelectedFeatures] = useState(['ma_20', 'rsi', 'volatility']);
-    const [modelType, setModelType] = useState('random_forest');
-    const [predictionWindow, setPredictionWindow] = useState('1w');
-    const [predictionTicker, setPredictionTicker] = useState(selectedStock || 'AAPL');
+    // Use lifted state from parent to prevent reset on re-render
+    const selectedFeatures = sandboxFeatures;
+    const setSelectedFeatures = setSandboxFeatures;
+    const modelType = sandboxModelType;
+    const setModelType = setSandboxModelType;
+    const predictionWindow = sandboxWindow;
+    const setPredictionWindow = setSandboxWindow;
+    const predictionTicker = sandboxTicker;
+    const setPredictionTicker = setSandboxTicker;
 
     const availableFeatures = [
       { id: 'ma_5', name: '5D MA', category: 'trend' },

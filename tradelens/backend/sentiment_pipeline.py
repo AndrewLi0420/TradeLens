@@ -124,15 +124,44 @@ class NewsAggregator:
             
             articles = []
             for item in news_items:
+                # yfinance returns nested structure with 'content' key
+                content = item.get("content", {})
+                
+                # Extract title
+                title = content.get("title", "")
+                if not title:
+                    continue  # Skip articles without titles
+                
+                # Extract link from canonicalUrl
+                canonical_url = content.get("canonicalUrl", {})
+                link = canonical_url.get("url", "") if isinstance(canonical_url, dict) else ""
+                
+                # Extract publisher from provider
+                provider = content.get("provider", {})
+                publisher = provider.get("displayName", "") if isinstance(provider, dict) else ""
+                
+                # Extract published date (ISO string format)
+                pub_date_str = content.get("pubDate", "")
+                if pub_date_str:
+                    try:
+                        published_at = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                    except ValueError:
+                        published_at = datetime.now()
+                else:
+                    published_at = datetime.now()
+                
+                # Extract thumbnail from resolutions
+                thumbnail_data = content.get("thumbnail", {})
+                resolutions = thumbnail_data.get("resolutions", []) if isinstance(thumbnail_data, dict) else []
+                thumbnail = resolutions[0].get("url", "") if resolutions else ""
+                
                 articles.append({
-                    "title": item.get("title", ""),
-                    "publisher": item.get("publisher", ""),
-                    "link": item.get("link", ""),
-                    "published_at": datetime.fromtimestamp(
-                        item.get("providerPublishTime", 0)
-                    ),
-                    "thumbnail": item.get("thumbnail", {}).get("resolutions", [{}])[0].get("url", ""),
-                    "type": item.get("type", "article")
+                    "title": title,
+                    "publisher": publisher,
+                    "link": link,
+                    "published_at": published_at,
+                    "thumbnail": thumbnail,
+                    "type": content.get("contentType", "article")
                 })
             
             logger.info(f"Fetched {len(articles)} articles for {ticker}")

@@ -15,7 +15,7 @@
    - Set as: `ANTHROPIC_API_KEY`
 
 2. **HuggingFace Token** (for FinBERT)
-   - Get from: https://huggingface.co/settings/tokens
+   - Get from:https://huggingface.co/settings/tokens
    - Set as: `HUGGINGFACE_TOKEN`
 
 ---

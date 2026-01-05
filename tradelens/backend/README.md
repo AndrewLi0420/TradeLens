@@ -16,18 +16,20 @@ FastAPI backend for TradeLens - an educational quantitative trading platform.
 
 ```bash
 # Create virtual environment
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # Copy environment variables
 cp .env.example .env
 # Edit .env with your API keys
 
 # Run development server
-uvicorn main:app --reload --port 8000
+python main.py
+
+#uvicorn main:app --reload --port 8000
 ```
 
 ### API Documentation

@@ -1,41 +1,616 @@
-/* src/app/globals.css */
+/* TradeLens Global Styles - High-Density Quant Dashboard */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   DESIGN SYSTEM VARIABLES
+   ============================================ */
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
-  --border: 214 31% 91%;
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --radius: 0.5rem;
+  /* Core Palette */
+  --tl-space: #1B264F;
+  --tl-space-light: #243366;
+  --tl-space-dark: #141d3d;
+  --tl-french: #274690;
+  --tl-french-light: #3157a8;
+  --tl-smart: #576CA8;
+  --tl-smart-light: #6b7fba;
+  --tl-graphite: #302B27;
+  --tl-graphite-light: #3d3733;
+  --tl-smoke: #F5F3F5;
+  --tl-smoke-dim: #E8E5E8;
+  
+  /* Semantic */
+  --tl-positive: #00C896;
+  --tl-positive-dim: rgba(0, 200, 150, 0.25);
+  --tl-negative: #FF4757;
+  --tl-negative-dim: rgba(255, 71, 87, 0.25);
+  --tl-warning: #FFB830;
+  --tl-warning-dim: rgba(255, 184, 48, 0.25);
+  --tl-neutral: #576CA8;
+  
+  /* Surfaces */
+  --tl-surface: #1E2235;
+  --tl-surface-elevated: #252A40;
+  --tl-surface-overlay: #2D3350;
+  --tl-border: #3A4060;
+  --tl-border-subtle: #2E3448;
+  
+  /* Text */
+  --text-primary: #F5F3F5;
+  --text-secondary: #A8AEBF;
+  --text-tertiary: #6B7280;
+  --text-muted: #4B5563;
+  
+  /* Chart Colors */
+  --tl-chart-1: #576CA8;
+  --tl-chart-2: #00C896;
+  --tl-chart-3: #FFB830;
+  --tl-chart-4: #FF6B9D;
+  --tl-chart-5: #8B5CF6;
+  
+  /* Legacy */
+  --foreground-rgb: 245, 243, 245;
+  --background-start-rgb: 30, 34, 53;
+  --background-end-rgb: 27, 38, 79;
+  --border: 220 15% 25%;
+  --background: 230 20% 12%;
+  --foreground: 0 0% 96%;
+  --radius: 0.375rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
-}
-
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
-}
-
+/* ============================================
+   BASE STYLES
+   ============================================ */
 @layer base {
   * {
-    @apply border-border;
+    @apply border-tl-border;
   }
+  
+  html {
+    font-feature-settings: 'tnum' on, 'lnum' on;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  
   body {
-    @apply bg-background text-foreground;
+    @apply bg-tl-space text-tl-smoke;
+    font-family: var(--font-sans), Inter, 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: linear-gradient(135deg, var(--tl-space) 0%, var(--tl-surface) 50%, var(--tl-space-dark) 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  
+  /* Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: var(--tl-surface);
+    border-radius: 3px;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: var(--tl-border);
+    border-radius: 3px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--tl-smart);
+  }
+  
+  /* Selection */
+  ::selection {
+    background: var(--tl-smart);
+    color: var(--tl-smoke);
+  }
+}
+
+/* ============================================
+   COMPONENT CLASSES
+   ============================================ */
+@layer components {
+  /* === CARDS & SURFACES === */
+  .tl-card {
+    @apply bg-tl-surface-elevated rounded-lg border border-tl-border-subtle;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  }
+  
+  .tl-card-compact {
+    @apply tl-card p-3;
+  }
+  
+  .tl-card-interactive {
+    @apply tl-card transition-all duration-150;
+  }
+  
+  .tl-card-interactive:hover {
+    @apply border-tl-smart bg-tl-surface-overlay;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .tl-panel {
+    @apply bg-tl-surface rounded-lg border border-tl-border-subtle overflow-hidden;
+  }
+  
+  .tl-panel-header {
+    @apply flex items-center justify-between px-3 py-2 bg-tl-surface-elevated border-b border-tl-border-subtle;
+  }
+  
+  .tl-panel-body {
+    @apply p-3;
+  }
+  
+  /* === DATA DISPLAY === */
+  .tl-metric-card {
+    @apply flex flex-col p-2.5 rounded-md bg-tl-surface border border-tl-border-subtle;
+  }
+  
+  .tl-metric-label {
+    @apply text-xxs uppercase tracking-wider font-medium;
+    color: var(--text-tertiary);
+  }
+  
+  .tl-metric-value {
+    @apply text-data-lg font-mono font-semibold text-tl-smoke mt-0.5;
+  }
+  
+  .tl-metric-delta {
+    @apply text-data-xs font-mono font-medium mt-0.5;
+  }
+  
+  .tl-price-positive {
+    @apply text-tl-positive;
+  }
+  
+  .tl-price-negative {
+    @apply text-tl-negative;
+  }
+  
+  .tl-price-neutral {
+    color: var(--text-secondary);
+  }
+  
+  /* === BADGES & INDICATORS === */
+  .tl-badge {
+    @apply inline-flex items-center px-1.5 py-0.5 rounded text-xxs font-medium uppercase tracking-wide;
+  }
+  
+  .tl-badge-positive {
+    @apply bg-tl-positive-muted text-tl-positive;
+  }
+  
+  .tl-badge-negative {
+    @apply bg-tl-negative-muted text-tl-negative;
+  }
+  
+  .tl-badge-warning {
+    @apply bg-tl-warning-muted text-tl-warning;
+  }
+  
+  .tl-badge-neutral {
+    @apply bg-tl-surface-overlay;
+    color: var(--text-secondary);
+  }
+  
+  .tl-indicator {
+    @apply w-2 h-2 rounded-full;
+  }
+  
+  .tl-indicator-positive {
+    @apply bg-tl-positive shadow-tl-glow-positive;
+  }
+  
+  .tl-indicator-negative {
+    @apply bg-tl-negative shadow-tl-glow-negative;
+  }
+  
+  .tl-indicator-neutral {
+    @apply bg-tl-smart;
+  }
+  
+  .tl-indicator-pulse {
+    @apply animate-pulse-slow;
+  }
+  
+  /* === TICKER DISPLAY === */
+  .tl-ticker {
+    @apply font-mono font-bold text-tl-smoke;
+  }
+  
+  .tl-ticker-badge {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-md bg-gradient-to-br from-tl-french to-tl-smart text-tl-smoke font-bold text-sm;
+  }
+  
+  .tl-ticker-row {
+    @apply flex items-center justify-between p-2 rounded-md transition-colors duration-100;
+  }
+  
+  .tl-ticker-row:hover {
+    @apply bg-tl-surface-overlay;
+  }
+  
+  /* === INPUTS === */
+  .tl-input {
+    @apply w-full px-3 py-2 bg-tl-surface border border-tl-border rounded-md text-tl-smoke text-data-sm font-mono transition-all duration-150;
+  }
+  
+  .tl-input::placeholder {
+    color: var(--text-muted);
+  }
+  
+  .tl-input:focus {
+    @apply outline-none border-tl-smart ring-1 ring-tl-smart bg-tl-surface-elevated;
+  }
+  
+  .tl-input-compact {
+    @apply tl-input py-1.5 px-2 text-data-xs;
+  }
+  
+  .tl-select {
+    @apply tl-input appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23A8AEBF'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+    padding-right: 2rem;
+  }
+  
+  /* === BUTTONS === */
+  .tl-btn {
+    @apply inline-flex items-center justify-center px-3 py-1.5 rounded-md text-data-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-tl-surface;
+  }
+  
+  .tl-btn-primary {
+    @apply tl-btn bg-tl-french text-tl-smoke hover:bg-tl-french-light focus:ring-tl-french;
+  }
+  
+  .tl-btn-secondary {
+    @apply tl-btn bg-tl-surface-elevated border border-tl-border hover:bg-tl-surface-overlay hover:text-tl-smoke focus:ring-tl-smart;
+    color: var(--text-secondary);
+  }
+  
+  .tl-btn-ghost {
+    @apply tl-btn hover:bg-tl-surface-overlay hover:text-tl-smoke;
+    color: var(--text-secondary);
+  }
+  
+  .tl-btn-positive {
+    @apply tl-btn bg-tl-positive text-tl-space hover:bg-opacity-90 focus:ring-tl-positive;
+  }
+  
+  .tl-btn-negative {
+    @apply tl-btn bg-tl-negative text-white hover:bg-opacity-90 focus:ring-tl-negative;
+  }
+  
+  .tl-btn-compact {
+    @apply px-2 py-1 text-data-xs;
+  }
+  
+  .tl-btn-icon {
+    @apply p-1.5 rounded-md hover:bg-tl-surface-overlay hover:text-tl-smoke transition-colors;
+    color: var(--text-secondary);
+  }
+  
+  /* Time range buttons */
+  .tl-time-btn {
+    @apply px-2 py-1 rounded text-xxs font-mono font-medium uppercase tracking-wide transition-all duration-100;
+  }
+  
+  .tl-time-btn-active {
+    @apply bg-tl-smart text-tl-smoke;
+  }
+  
+  .tl-time-btn-inactive {
+    @apply bg-tl-surface hover:bg-tl-surface-elevated;
+    color: var(--text-tertiary);
+  }
+  
+  .tl-time-btn-inactive:hover {
+    color: var(--text-secondary);
+  }
+  
+  /* === NAVIGATION === */
+  .tl-nav-item {
+    @apply px-3 py-2 text-data-sm font-medium transition-all duration-100;
+  }
+  
+  .tl-nav-item-active {
+    @apply text-tl-smoke border-b-2 border-tl-smart;
+  }
+  
+  .tl-nav-item-inactive {
+    @apply hover:text-tl-smoke border-b-2 border-transparent;
+    color: var(--text-secondary);
+  }
+  
+  /* === TABLES === */
+  .tl-table {
+    @apply w-full text-data-sm;
+  }
+  
+  .tl-table th {
+    @apply text-left text-xxs uppercase tracking-wider font-medium py-2 px-2 border-b border-tl-border-subtle;
+    color: var(--text-tertiary);
+  }
+  
+  .tl-table td {
+    @apply py-2 px-2 border-b border-tl-border-subtle font-mono;
+  }
+  
+  .tl-table tbody tr {
+    @apply transition-colors;
+  }
+  
+  .tl-table tbody tr:hover {
+    @apply bg-tl-surface-overlay;
+  }
+  
+  /* === LOADING STATES === */
+  .tl-skeleton {
+    @apply animate-pulse bg-tl-surface-overlay rounded;
+  }
+  
+  .tl-shimmer {
+    background: linear-gradient(90deg, var(--tl-surface) 0%, var(--tl-surface-elevated) 50%, var(--tl-surface) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+  
+  .tl-loading-bar {
+    @apply h-0.5 bg-tl-french rounded-full overflow-hidden;
+  }
+  
+  .tl-loading-bar::after {
+    content: '';
+    @apply block h-full w-1/3 bg-tl-smart rounded-full;
+    animation: loading-progress 1.5s ease-in-out infinite;
+  }
+  
+  /* === CHART CONTAINERS === */
+  .tl-chart-container {
+    @apply bg-tl-surface rounded-md p-2;
+  }
+  
+  .tl-chart-grid {
+    background-image: linear-gradient(rgba(87, 108, 168, 0.05) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(87, 108, 168, 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  
+  /* === PROGRESS BARS === */
+  .tl-progress {
+    @apply h-1.5 bg-tl-surface rounded-full overflow-hidden;
+  }
+  
+  .tl-progress-bar {
+    @apply h-full rounded-full transition-all duration-300;
+  }
+  
+  .tl-progress-positive {
+    @apply bg-tl-positive;
+  }
+  
+  .tl-progress-negative {
+    @apply bg-tl-negative;
+  }
+  
+  .tl-progress-neutral {
+    @apply bg-tl-smart;
+  }
+  
+  /* === SCROLLABLE AREAS === */
+  .tl-scroll-area {
+    @apply overflow-auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--tl-border) var(--tl-surface);
+  }
+  
+  /* === ANIMATIONS === */
+  .tl-price-flash-up {
+    animation: priceFlashUp 0.6s ease-out;
+  }
+  
+  .tl-price-flash-down {
+    animation: priceFlashDown 0.6s ease-out;
+  }
+  
+  .tl-enter {
+    @apply animate-fade-in;
+  }
+  
+  .tl-slide-up {
+    @apply animate-slide-up;
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+@layer utilities {
+  /* Text utilities */
+  .text-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  
+  /* Truncation */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  /* Gradient text */
+  .text-gradient-tl {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-tl-smart to-tl-positive;
+  }
+  
+  /* Glassmorphism */
+  .glass {
+    @apply bg-tl-surface/80 backdrop-blur-md border border-tl-border-subtle;
+  }
+  
+  .glass-dark {
+    @apply bg-tl-space/90 backdrop-blur-md border border-tl-border;
+  }
+  
+  /* Hover effects */
+  .hover-lift {
+    @apply transition-transform duration-150;
+  }
+  
+  .hover-lift:hover {
+    @apply -translate-y-0.5;
+  }
+  
+  /* Text color utilities with CSS variables */
+  .text-tl-tertiary {
+    color: var(--text-tertiary);
+  }
+  
+  .text-tl-secondary {
+    color: var(--text-secondary);
+  }
+  
+  .text-tl-muted {
+    color: var(--text-muted);
+  }
+  
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .tl-price-flash-up,
+    .tl-price-flash-down,
+    .animate-pulse,
+    .animate-pulse-slow {
+      animation: none !important;
+    }
+  }
+}
+
+/* ============================================
+   KEYFRAME ANIMATIONS
+   ============================================ */
+@keyframes loading-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(200%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes priceFlashUp {
+  0% {
+    background-color: rgba(0, 200, 150, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes priceFlashDown {
+  0% {
+    background-color: rgba(255, 71, 87, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* ============================================
+   RECHARTS CUSTOMIZATION
+   ============================================ */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--tl-border-subtle) !important;
+  stroke-opacity: 0.5;
+}
+
+.recharts-text {
+  fill: var(--text-tertiary) !important;
+  font-family: var(--font-mono), 'JetBrains Mono', monospace !important;
+  font-size: 10px !important;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+.recharts-default-tooltip {
+  background: var(--tl-surface-overlay) !important;
+  border: 1px solid var(--tl-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.recharts-tooltip-label {
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+  font-family: var(--font-mono), 'JetBrains Mono', monospace !important;
+  margin-bottom: 4px !important;
+}
+
+.recharts-tooltip-item {
+  font-size: 11px !important;
+  padding: 2px 0 !important;
+}
+
+.recharts-tooltip-item-name {
+  color: var(--text-secondary) !important;
+}
+
+.recharts-tooltip-item-value {
+  color: var(--tl-smoke) !important;
+  font-family: var(--font-mono), 'JetBrains Mono', monospace !important;
+  font-weight: 600 !important;
+}
+
+.recharts-legend-item-text {
+  color: var(--text-secondary) !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+@media (max-width: 640px) {
+  .tl-metric-card {
+    @apply p-2;
+  }
+  
+  .tl-metric-value {
+    @apply text-data-base;
+  }
+  
+  .tl-card {
+    @apply rounded-md;
+  }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+  body {
+    @apply bg-white text-black;
+  }
+  
+  .tl-card {
+    @apply border-gray-300 shadow-none;
   }
 }

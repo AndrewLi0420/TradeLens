@@ -10,10 +10,10 @@ from datetime import datetime, timedelta
 import asyncio
 from functools import lru_cache
 import logging
-import os
 from dotenv import load_dotenv
+import os
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
 # ML imports
@@ -22,7 +22,8 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 
-# Redis for caching (optional)
+# Redis for caching
+import redis
 import json
 
 logging.basicConfig(level=logging.INFO)
@@ -30,49 +31,17 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="TradeLens API", version="1.0.0")
 
-# CORS configuration - allow all origins for public API
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Configure for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Redis connection (optional - graceful fallback if unavailable)
-redis_client = None
-try:
-    import redis
-    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-    redis_client.ping()  # Test connection
-    logger.info("✅ Redis connected successfully")
-except Exception as e:
-    logger.warning(f"⚠️ Redis not available, caching disabled: {e}")
-    redis_client = None
-
-
-class RedisCache:
-    """Simple cache wrapper that handles Redis being unavailable"""
-    
-    @staticmethod
-    def get(key: str):
-        if redis_client:
-            try:
-                return redis_client.get(key)
-            except:
-                return None
-        return None
-    
-    @staticmethod
-    def setex(key: str, ttl: int, value: str):
-        if redis_client:
-            try:
-                redis_client.setex(key, ttl, value)
-            except:
-                pass
-
-
-cache = RedisCache()
+# Redis connection (configure as needed)
+redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 # ============================================================================
 # DATA MODELS
@@ -152,7 +121,7 @@ async def get_stock_price(ticker: str, range: str = "1m"):
     cache_key = f"price:{ticker}:{range}"
     
     # Check cache (5 min expiry for recent data)
-    cached = cache.get(cache_key)
+    cached = redis_client.get(cache_key)
     if cached and range in ["1d", "5d"]:
         return json.loads(cached)
     
@@ -185,7 +154,7 @@ async def get_stock_price(ticker: str, range: str = "1m"):
         }
         
         # Cache result
-        cache.setex(cache_key, 300, json.dumps(result))
+        redis_client.setex(cache_key, 300, json.dumps(result))
         
         return result
         
@@ -197,7 +166,7 @@ async def get_stock_price(ticker: str, range: str = "1m"):
 async def get_fundamentals(ticker: str):
     """Get fundamental data"""
     cache_key = f"fundamentals:{ticker}"
-    cached = cache.get(cache_key)
+    cached = redis_client.get(cache_key)
     
     if cached:
         return json.loads(cached)
@@ -225,7 +194,7 @@ async def get_fundamentals(ticker: str):
         }
         
         # Cache for 1 hour
-        cache.setex(cache_key, 3600, json.dumps(fundamentals))
+        redis_client.setex(cache_key, 3600, json.dumps(fundamentals))
         
         return fundamentals
         
@@ -419,13 +388,41 @@ async def get_news(ticker: str, limit: int = 10):
         
         formatted_news = []
         for article in news:
-            formatted_news.append({
-                "title": article.get("title", ""),
-                "publisher": article.get("publisher", ""),
-                "link": article.get("link", ""),
-                "published_at": datetime.fromtimestamp(article.get("providerPublishTime", 0)).isoformat(),
-                "thumbnail": article.get("thumbnail", {}).get("resolutions", [{}])[0].get("url", "")
-            })
+            # yfinance returns nested structure with 'content' key
+            content = article.get("content", {})
+            
+            # Extract title
+            title = content.get("title", "")
+            
+            # Extract link from canonicalUrl
+            canonical_url = content.get("canonicalUrl", {})
+            link = canonical_url.get("url", "") if isinstance(canonical_url, dict) else ""
+            
+            # Extract publisher from provider
+            provider = content.get("provider", {})
+            publisher = provider.get("displayName", "") if isinstance(provider, dict) else ""
+            
+            # Extract published date (ISO string format)
+            pub_date = content.get("pubDate", "")
+            if pub_date:
+                published_at = pub_date  # Already ISO format
+            else:
+                published_at = datetime.now().isoformat()
+            
+            # Extract thumbnail from resolutions
+            thumbnail_data = content.get("thumbnail", {})
+            resolutions = thumbnail_data.get("resolutions", []) if isinstance(thumbnail_data, dict) else []
+            thumbnail = resolutions[0].get("url", "") if resolutions else ""
+            
+            # Only add if we have at least a title
+            if title:
+                formatted_news.append({
+                    "title": title,
+                    "publisher": publisher,
+                    "link": link,
+                    "published_at": published_at,
+                    "thumbnail": thumbnail
+                })
         
         return {
             "ticker": ticker.upper(),
@@ -438,15 +435,14 @@ async def get_news(ticker: str, limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
-# AI ASSISTANT (Uses Claude API - requires ANTHROPIC_API_KEY env var)
+# AI ASSISTANT (Uses Gemini API - requires ANTHROPIC_API_KEY env var)
 # ============================================================================
+
+from llm_service import llm_service
 
 @app.post("/api/ai/explain-movement")
 async def explain_movement(request: AIExplainRequest):
     """Generate AI explanation of stock movement"""
-    # This would integrate with Claude API
-    # For now, return structured response
-    
     ticker = request.ticker.upper()
     
     try:
@@ -462,10 +458,35 @@ async def explain_movement(request: AIExplainRequest):
             previous = hist['Close'].iloc[-2]
             change_pct = ((current - previous) / previous) * 100
             
+            # Prepare data for LLM
+            price_data = {
+                "current_price": round(current, 2),
+                "previous_close": round(previous, 2),
+                "change_percent": round(change_pct, 2)
+            }
+            
+            fundamentals = {
+                "sector": info.get("sector", "N/A"),
+                "pe_ratio": info.get("trailingPE", "N/A")
+            }
+            
+            news_data = [{"title": article.get("title", "")} for article in news]
+            
+            sentiment = {"overall_sentiment": "neutral"}  # Can be enhanced later
+            
+            # Generate AI explanation
+            explanation = llm_service.explain_stock_movement(
+                ticker=ticker,
+                price_data=price_data,
+                news_data=news_data,
+                sentiment=sentiment,
+                fundamentals=fundamentals
+            )
+            
             return {
                 "ticker": ticker,
                 "movement": round(change_pct, 2),
-                "explanation": f"Educational explanation would be generated here using Claude API with context about {ticker}'s recent performance, news, and market conditions.",
+                "explanation": explanation,
                 "data_points": {
                     "current_price": round(current, 2),
                     "previous_close": round(previous, 2),
@@ -482,12 +503,26 @@ async def explain_movement(request: AIExplainRequest):
 @app.post("/api/ai/chat")
 async def ai_chat(request: ChatRequest):
     """Chat with AI assistant"""
-    # Integration with Claude API
-    return {
-        "response": "AI assistant response would be generated here using Claude API.",
-        "context_used": request.ticker or "general",
-        "timestamp": datetime.now().isoformat()
-    }
+    logger.info(f"Received chat request: {request.message[:50]}")
+    try:
+        response = llm_service.chat(
+            user_message=request.message,
+            conversation_history=[],  # Can be enhanced with session management
+            context=request.context
+        )
+        logger.info("Chat response generated successfully")
+        return {
+            "response": response,
+            "context_used": request.ticker or "general",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
+        # Return a 200 with error message instead of 500 to help debugging
+        return {
+            "response": f"Backend Error: {str(e)}",
+            "error": True
+        }
 
 # ============================================================================
 # HEALTH CHECK

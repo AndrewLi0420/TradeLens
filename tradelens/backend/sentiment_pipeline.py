@@ -3,7 +3,7 @@
 import yfinance as yf
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 from typing import List, Dict
 import logging
@@ -145,10 +145,13 @@ class NewsAggregator:
                 if pub_date_str:
                     try:
                         published_at = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                        # Ensure timezone aware - convert to UTC if needed
+                        if published_at.tzinfo is None:
+                            published_at = published_at.replace(tzinfo=timezone.utc)
                     except ValueError:
-                        published_at = datetime.now()
+                        published_at = datetime.now(timezone.utc)
                 else:
-                    published_at = datetime.now()
+                    published_at = datetime.now(timezone.utc)
                 
                 # Extract thumbnail from resolutions
                 thumbnail_data = content.get("thumbnail", {})
@@ -219,8 +222,8 @@ class NewsAggregator:
                     "sentiment": None
                 }
             
-            # Filter by date range
-            cutoff_date = datetime.now() - timedelta(days=days)
+            # Filter by date range (use UTC aware datetime)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
             recent_articles = [
                 a for a in articles 
                 if a["published_at"] > cutoff_date

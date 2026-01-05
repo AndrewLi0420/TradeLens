@@ -47,6 +47,41 @@ interface Fundamentals {
   description: string;
 }
 
+interface SentimentArticle {
+  title: string;
+  publisher: string;
+  link: string;
+  published_at: string;
+  sentiment: {
+    positive: number;
+    negative: number;
+    neutral: number;
+    compound: number;
+  };
+}
+
+interface SentimentData {
+  ticker: string;
+  period_days: number;
+  total_articles: number;
+  overall_sentiment: {
+    avg_positive: number;
+    avg_negative: number;
+    avg_neutral: number;
+    avg_compound: number;
+    overall_sentiment: string;
+    sample_size: number;
+  };
+  daily_sentiment: Array<{
+    date: string;
+    compound: number;
+    article_count: number;
+  }>;
+  articles: SentimentArticle[];
+  analyzed_at: string;
+  error?: string;
+}
+
 interface Prediction {
   ticker: string;
   current_price: number;
@@ -74,7 +109,7 @@ const generateSyntheticNews = (ticker: string): NewsArticle[] => {
     'META': 'Meta',
   };
   const company = companyNames[ticker] || ticker;
-  
+
   const newsTemplates = [
     {
       title: `${company} Reports Strong Q4 Earnings, Beats Analyst Expectations`,
@@ -121,12 +156,12 @@ const generateSyntheticNews = (ticker: string): NewsArticle[] => {
 const generateWeeklySentiment = (ticker: string) => {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const seed = ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  
+
   return days.map((day, i) => {
     const basePositive = 35 + ((seed * (i + 1)) % 30);
     const baseNegative = 15 + ((seed * (i + 2)) % 20);
     const neutral = 100 - basePositive - baseNegative;
-    
+
     return {
       day,
       positive: Math.round(basePositive),
@@ -142,7 +177,7 @@ const TradeLens = () => {
   const [timeRange, setTimeRange] = useState('1m');
   const [searchQuery, setSearchQuery] = useState('');
   const [watchlist, setWatchlist] = useState(['AAPL', 'TSLA', 'NVDA', 'MSFT']);
-  
+
   // API Data States
   const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
   const [priceData, setPriceData] = useState<PriceData[]>([]);
@@ -150,16 +185,18 @@ const TradeLens = () => {
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
+  const [sentimentData, setSentimentData] = useState<SentimentData | null>(null);
   const [watchlistPrices, setWatchlistPrices] = useState<Record<string, { price: number; change: number }>>({});
   const [watchlistFundamentals, setWatchlistFundamentals] = useState<Record<string, { sector: string; industry: string }>>({});
-  
+
   // Loading States
   const [loadingMarket, setLoadingMarket] = useState(true);
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [loadingNews, setLoadingNews] = useState(false);
   const [loadingPrediction, setLoadingPrediction] = useState(false);
+  const [loadingSentiment, setLoadingSentiment] = useState(false);
   const [loadingWatchlist, setLoadingWatchlist] = useState(true);
-  
+
   // Error States
   const [error, setError] = useState<string | null>(null);
 
@@ -239,11 +276,33 @@ const TradeLens = () => {
     }
   }, []);
 
+  // Fetch sentiment data
+  const fetchSentiment = useCallback(async (ticker: string) => {
+    if (!ticker) return;
+    setLoadingSentiment(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/sentiment/${ticker}?days=7`);
+      if (!response.ok) throw new Error('Failed to fetch sentiment');
+      const data = await response.json();
+      if (!data.error) {
+        setSentimentData(data);
+      } else {
+        console.warn('Sentiment API error:', data.error);
+        setSentimentData(null);
+      }
+    } catch (err) {
+      console.error('Sentiment fetch error:', err);
+      setSentimentData(null);
+    } finally {
+      setLoadingSentiment(false);
+    }
+  }, []);
+
   // Fetch watchlist prices
   const fetchWatchlistPrices = useCallback(async () => {
     setLoadingWatchlist(true);
     const prices: Record<string, { price: number; change: number }> = {};
-    
+
     await Promise.all(
       watchlist.map(async (ticker) => {
         try {
@@ -265,7 +324,7 @@ const TradeLens = () => {
         }
       })
     );
-    
+
     setWatchlistPrices(prices);
     setLoadingWatchlist(false);
   }, [watchlist]);
@@ -278,10 +337,10 @@ const TradeLens = () => {
           const response = await fetch(`${API_BASE}/api/stock/${ticker}/fundamentals`);
           if (response.ok) {
             const data = await response.json();
-            return { 
-              ticker, 
-              sector: data.sector || 'Unknown', 
-              industry: data.industry || 'Unknown' 
+            return {
+              ticker,
+              sector: data.sector || 'Unknown',
+              industry: data.industry || 'Unknown'
             };
           }
         } catch (err) {
@@ -290,14 +349,14 @@ const TradeLens = () => {
         return null;
       })
     );
-    
+
     const newData: Record<string, { sector: string; industry: string }> = {};
     results.forEach(result => {
       if (result) {
         newData[result.ticker] = { sector: result.sector, industry: result.industry };
       }
     });
-    
+
     if (Object.keys(newData).length > 0) {
       setWatchlistFundamentals(prev => ({ ...prev, ...newData }));
     }
@@ -337,7 +396,7 @@ const TradeLens = () => {
     fetchMarketOverview();
     fetchWatchlistPrices();
     fetchWatchlistFundamentals();
-    
+
     const interval = setInterval(fetchMarketOverview, 60000);
     return () => clearInterval(interval);
   }, [fetchMarketOverview, fetchWatchlistPrices, fetchWatchlistFundamentals]);
@@ -348,8 +407,9 @@ const TradeLens = () => {
       fetchStockPrice(selectedStock, timeRange);
       fetchNews(selectedStock);
       fetchFundamentals(selectedStock);
+      fetchSentiment(selectedStock);
     }
-  }, [selectedStock, timeRange, fetchStockPrice, fetchNews, fetchFundamentals]);
+  }, [selectedStock, timeRange, fetchStockPrice, fetchNews, fetchFundamentals, fetchSentiment]);
 
   // Handle search
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -395,8 +455,8 @@ const TradeLens = () => {
             // Use the actual index ticker directly (e.g., ^GSPC, ^IXIC) for accurate index prices
             const indexTicker = index.ticker;
             return (
-              <div 
-                key={index.name} 
+              <div
+                key={index.name}
                 className="flex-shrink-0 tl-card-compact min-w-[160px] hover:border-tl-smart transition-colors cursor-pointer"
                 onClick={() => {
                   if (indexTicker) {
@@ -438,12 +498,12 @@ const TradeLens = () => {
 
     const handleAddStock = async (inputValue?: string) => {
       const ticker = (inputValue || newStockTicker).toUpperCase().trim();
-      
+
       if (!ticker) {
         setAddStockError('Enter ticker');
         return;
       }
-      
+
       if (watchlist.includes(ticker)) {
         setAddStockError('Already added');
         return;
@@ -455,12 +515,12 @@ const TradeLens = () => {
           setAddStockError('Invalid ticker');
           return;
         }
-        
+
         setWatchlist([...watchlist, ticker]);
         setNewStockTicker('');
         setIsAddingStock(false);
         setAddStockError(null);
-        
+
         fetchWatchlistPrices();
         fetchWatchlistFundamentals();
       } catch (err) {
@@ -481,15 +541,15 @@ const TradeLens = () => {
             <h3 className="text-data-sm font-semibold text-tl-smoke">Watchlist</h3>
             <span className="tl-badge tl-badge-neutral">{watchlist.length}</span>
           </div>
-          <button 
-            onClick={fetchWatchlistPrices} 
+          <button
+            onClick={fetchWatchlistPrices}
             className="tl-btn-icon"
             disabled={loadingWatchlist}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingWatchlist ? 'animate-spin' : ''}`} />
           </button>
         </div>
-        
+
         <div className="tl-panel-body p-0 flex-1 flex flex-col">
           <div className="divide-y divide-tl-border-subtle flex-1 overflow-y-auto tl-scroll-area">
             {watchlist.map((ticker) => {
@@ -517,7 +577,7 @@ const TradeLens = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     <div className="text-right">
                       {loadingWatchlist && !priceInfo ? (
@@ -550,7 +610,7 @@ const TradeLens = () => {
               );
             })}
           </div>
-          
+
           <div className="p-3 border-t border-tl-border-subtle">
             {isAddingStock ? (
               <div className="space-y-2">
@@ -593,7 +653,7 @@ const TradeLens = () => {
                 )}
               </div>
             ) : (
-              <button 
+              <button
                 onClick={() => setIsAddingStock(true)}
                 className="w-full py-2 border border-dashed border-tl-border rounded-md text-tl-tertiary text-data-xs font-medium hover:border-tl-smart hover:text-tl-smart hover:bg-tl-surface-overlay transition-all"
               >
@@ -608,11 +668,11 @@ const TradeLens = () => {
 
   // Stock Chart Component - Enhanced
   const StockChart = () => {
-    const priceChange = priceData.length >= 2 
-      ? ((priceData[priceData.length - 1]?.close - priceData[0]?.close) / priceData[0]?.close) * 100 
+    const priceChange = priceData.length >= 2
+      ? ((priceData[priceData.length - 1]?.close - priceData[0]?.close) / priceData[0]?.close) * 100
       : 0;
     const isPositive = priceChange >= 0;
-    
+
     return (
       <div className="tl-panel">
         <div className="tl-panel-header">
@@ -636,22 +696,21 @@ const TradeLens = () => {
               )}
             </div>
           </div>
-          
+
           <div className="flex items-center gap-1">
             {timeRanges.map((range) => (
               <button
                 key={range.value}
                 onClick={() => setTimeRange(range.value)}
-                className={`tl-time-btn ${
-                  timeRange === range.value ? 'tl-time-btn-active' : 'tl-time-btn-inactive'
-                }`}
+                className={`tl-time-btn ${timeRange === range.value ? 'tl-time-btn-active' : 'tl-time-btn-inactive'
+                  }`}
               >
                 {range.label}
               </button>
             ))}
           </div>
         </div>
-        
+
         <div className="tl-panel-body p-4">
           {loadingPrice ? (
             <div className="h-[280px] flex items-center justify-center">
@@ -672,7 +731,7 @@ const TradeLens = () => {
                     dataKey="time"
                     tickFormatter={(time) => {
                       const date = new Date(time * 1000);
-                      return timeRange === '1d' 
+                      return timeRange === '1d'
                         ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                         : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
                     }}
@@ -681,8 +740,8 @@ const TradeLens = () => {
                     tickLine={false}
                     axisLine={false}
                   />
-                  <YAxis 
-                    stroke="#6B7280" 
+                  <YAxis
+                    stroke="#6B7280"
                     fontSize={10}
                     domain={['dataMin', 'dataMax']}
                     tickFormatter={(val) => `$${val.toFixed(0)}`}
@@ -691,9 +750,9 @@ const TradeLens = () => {
                     width={50}
                   />
                   <Tooltip
-                    contentStyle={{ 
-                      background: '#252A40', 
-                      border: '1px solid #3A4060', 
+                    contentStyle={{
+                      background: '#252A40',
+                      border: '1px solid #3A4060',
                       borderRadius: '6px',
                       boxShadow: '0 4px 8px rgba(0, 0, 0, 0.3)'
                     }}
@@ -702,9 +761,9 @@ const TradeLens = () => {
                     labelFormatter={(time) => new Date(time * 1000).toLocaleString()}
                     formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="close" 
+                  <Area
+                    type="monotone"
+                    dataKey="close"
                     stroke={isPositive ? '#00C896' : '#FF4757'}
                     strokeWidth={2}
                     fill="url(#chartGradient)"
@@ -741,7 +800,7 @@ const TradeLens = () => {
             )}
           </div>
         </div>
-        
+
         <div className="tl-panel-body p-0 tl-scroll-area flex-1 overflow-y-auto">
           {loadingNews ? (
             <div className="p-3 space-y-3">
@@ -756,9 +815,9 @@ const TradeLens = () => {
           ) : displayNews.length > 0 ? (
             <div className="divide-y divide-tl-border-subtle">
               {displayNews.map((article, i) => (
-                <a 
-                  key={i} 
-                  href={article.link} 
+                <a
+                  key={i}
+                  href={article.link}
                   target={isSynthetic ? "_self" : "_blank"}
                   rel="noopener noreferrer"
                   className="block px-3 py-2.5 hover:bg-tl-surface-overlay transition-colors group"
@@ -788,16 +847,62 @@ const TradeLens = () => {
     );
   };
 
-  // Weekly Sentiment Chart - Compact
+  // Weekly Sentiment Chart - Now with Real FinBERT Data
   const WeeklySentimentChart = () => {
-    const sentimentData = selectedStock ? generateWeeklySentiment(selectedStock) : [];
-    
+    // Use real sentiment data from API, fall back to synthetic if not available
+    const hasRealData = sentimentData && sentimentData.ticker?.toUpperCase() === selectedStock?.toUpperCase() && !sentimentData.error;
+
+    // Transform API data to chart format
+    const chartData = hasRealData && sentimentData.articles?.length > 0
+      ? (() => {
+        // Group articles by day and calculate daily averages
+        const dayGroups: Record<string, { positive: number; neutral: number; negative: number; count: number }> = {};
+
+        sentimentData.articles.forEach(article => {
+          const date = new Date(article.published_at);
+          const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+
+          if (!dayGroups[dayName]) {
+            dayGroups[dayName] = { positive: 0, neutral: 0, negative: 0, count: 0 };
+          }
+
+          dayGroups[dayName].positive += article.sentiment.positive * 100;
+          dayGroups[dayName].neutral += article.sentiment.neutral * 100;
+          dayGroups[dayName].negative += article.sentiment.negative * 100;
+          dayGroups[dayName].count += 1;
+        });
+
+        return Object.entries(dayGroups).map(([day, data]) => ({
+          day,
+          positive: Math.round(data.positive / data.count),
+          neutral: Math.round(data.neutral / data.count),
+          negative: Math.round(data.negative / data.count),
+        }));
+      })()
+      : selectedStock ? generateWeeklySentiment(selectedStock) : [];
+
     if (!selectedStock) return null;
 
-    const avgPositive = sentimentData.reduce((acc, d) => acc + d.positive, 0) / sentimentData.length;
-    const avgNegative = sentimentData.reduce((acc, d) => acc + d.negative, 0) / sentimentData.length;
-    const sentimentScore = Math.round(avgPositive - avgNegative);
-    const sentimentLabel = sentimentScore > 20 ? 'Bullish' : sentimentScore > 5 ? 'Positive' : sentimentScore > -5 ? 'Neutral' : sentimentScore > -20 ? 'Bearish' : 'Very Bearish';
+    // Calculate averages from chart data
+    const avgPositive = chartData.length > 0
+      ? chartData.reduce((acc, d) => acc + d.positive, 0) / chartData.length
+      : 0;
+    const avgNegative = chartData.length > 0
+      ? chartData.reduce((acc, d) => acc + d.negative, 0) / chartData.length
+      : 0;
+    const avgNeutral = chartData.length > 0
+      ? chartData.reduce((acc, d) => acc + d.neutral, 0) / chartData.length
+      : 0;
+
+    // Use API's overall sentiment if available, otherwise calculate from chart data
+    const sentimentScore = hasRealData && sentimentData.overall_sentiment
+      ? Math.round(sentimentData.overall_sentiment.avg_compound * 100)
+      : Math.round(avgPositive - avgNegative);
+
+    const overallLabel = hasRealData && sentimentData.overall_sentiment?.overall_sentiment
+      ? sentimentData.overall_sentiment.overall_sentiment.charAt(0).toUpperCase() +
+      sentimentData.overall_sentiment.overall_sentiment.slice(1)
+      : sentimentScore > 20 ? 'Bullish' : sentimentScore > 5 ? 'Positive' : sentimentScore > -5 ? 'Neutral' : sentimentScore > -20 ? 'Bearish' : 'Very Bearish';
 
     return (
       <div className="tl-panel">
@@ -805,75 +910,114 @@ const TradeLens = () => {
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-tl-smart" />
             <h3 className="text-data-sm font-semibold text-tl-smoke">Sentiment Analysis</h3>
-            <span className="tl-badge tl-badge-warning">Sample</span>
+            {!hasRealData && <span className="tl-badge tl-badge-warning">Sample</span>}
+            {hasRealData && <span className="tl-badge tl-badge-positive">FinBERT</span>}
           </div>
           <div className="flex items-center gap-2">
-            <span className={`tl-badge ${sentimentScore > 5 ? 'tl-badge-positive' : sentimentScore < -5 ? 'tl-badge-negative' : 'tl-badge-neutral'}`}>
-              {sentimentLabel}
-            </span>
-            <span className="font-mono text-data-xs text-tl-secondary">
-              {sentimentScore > 0 ? '+' : ''}{sentimentScore}
-            </span>
+            {loadingSentiment ? (
+              <Loader2 className="w-4 h-4 animate-spin text-tl-smart" />
+            ) : (
+              <>
+                <span className={`tl-badge ${sentimentScore > 5 ? 'tl-badge-positive' : sentimentScore < -5 ? 'tl-badge-negative' : 'tl-badge-neutral'}`}>
+                  {overallLabel}
+                </span>
+                <span className="font-mono text-data-xs text-tl-secondary">
+                  {sentimentScore > 0 ? '+' : ''}{sentimentScore}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
         <div className="tl-panel-body">
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={sentimentData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }} barSize={40}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2E3448" vertical={false} />
-              <XAxis 
-                dataKey="day" 
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#6B7280', fontSize: 10 }}
-              />
-              <YAxis 
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#6B7280', fontSize: 10 }}
-                tickFormatter={(val) => `${val}%`}
-              />
-              <Tooltip
-                contentStyle={{ 
-                  background: '#252A40', 
-                  border: '1px solid #3A4060', 
-                  borderRadius: '6px',
-                  fontSize: '11px'
-                }}
-                formatter={(value: number, name: string) => [
-                  `${value}%`, 
-                  name.charAt(0).toUpperCase() + name.slice(1)
-                ]}
-              />
-              <Bar dataKey="positive" stackId="sentiment" fill="#00C896" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="neutral" stackId="sentiment" fill="#576CA8" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="negative" stackId="sentiment" fill="#FF4757" radius={[0, 0, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {loadingSentiment ? (
+            <div className="h-[180px] flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 className="w-6 h-6 animate-spin text-tl-smart mx-auto mb-2" />
+                <p className="text-data-xs text-tl-tertiary">Analyzing sentiment with FinBERT...</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }} barSize={40}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2E3448" vertical={false} />
+                  <XAxis
+                    dataKey="day"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#6B7280', fontSize: 10 }}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#6B7280', fontSize: 10 }}
+                    tickFormatter={(val) => `${val}%`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#252A40',
+                      border: '1px solid #3A4060',
+                      borderRadius: '6px',
+                      fontSize: '11px'
+                    }}
+                    formatter={(value: number, name: string) => [
+                      `${value}%`,
+                      name.charAt(0).toUpperCase() + name.slice(1)
+                    ]}
+                  />
+                  <Bar dataKey="positive" stackId="sentiment" fill="#00C896" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="neutral" stackId="sentiment" fill="#576CA8" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="negative" stackId="sentiment" fill="#FF4757" radius={[0, 0, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
 
-          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-tl-border-subtle">
-            <div className="tl-metric-card">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-tl-positive rounded-sm" />
-                <span className="tl-metric-label">Positive</span>
+              <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-tl-border-subtle">
+                <div className="tl-metric-card">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 bg-tl-positive rounded-sm" />
+                    <span className="tl-metric-label">Positive</span>
+                  </div>
+                  <div className="font-mono text-data-base font-semibold text-tl-positive">
+                    {hasRealData && sentimentData.overall_sentiment
+                      ? Math.round(sentimentData.overall_sentiment.avg_positive * 100)
+                      : Math.round(avgPositive)}%
+                  </div>
+                </div>
+                <div className="tl-metric-card">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 bg-tl-smart rounded-sm" />
+                    <span className="tl-metric-label">Neutral</span>
+                  </div>
+                  <div className="font-mono text-data-base font-semibold text-tl-secondary">
+                    {hasRealData && sentimentData.overall_sentiment
+                      ? Math.round(sentimentData.overall_sentiment.avg_neutral * 100)
+                      : Math.round(avgNeutral)}%
+                  </div>
+                </div>
+                <div className="tl-metric-card">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 bg-tl-negative rounded-sm" />
+                    <span className="tl-metric-label">Negative</span>
+                  </div>
+                  <div className="font-mono text-data-base font-semibold text-tl-negative">
+                    {hasRealData && sentimentData.overall_sentiment
+                      ? Math.round(sentimentData.overall_sentiment.avg_negative * 100)
+                      : Math.round(avgNegative)}%
+                  </div>
+                </div>
               </div>
-              <div className="font-mono text-data-base font-semibold text-tl-positive">{Math.round(avgPositive)}%</div>
-            </div>
-            <div className="tl-metric-card">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-tl-smart rounded-sm" />
-                <span className="tl-metric-label">Neutral</span>
-              </div>
-              <div className="font-mono text-data-base font-semibold text-tl-secondary">{Math.round(100 - avgPositive - avgNegative)}%</div>
-            </div>
-            <div className="tl-metric-card">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-tl-negative rounded-sm" />
-                <span className="tl-metric-label">Negative</span>
-              </div>
-              <div className="font-mono text-data-base font-semibold text-tl-negative">{Math.round(avgNegative)}%</div>
-            </div>
-          </div>
+
+              {/* Article count info */}
+              {hasRealData && (
+                <div className="mt-2 pt-2 border-t border-tl-border-subtle text-center">
+                  <span className="text-xxs text-tl-tertiary">
+                    Based on {sentimentData.total_articles} articles analyzed
+                  </span>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     );
@@ -888,7 +1032,7 @@ const TradeLens = () => {
           <h3 className="text-data-sm font-semibold text-tl-smoke">Fundamentals</h3>
         </div>
       </div>
-      
+
       <div className="tl-panel-body">
         {fundamentals && fundamentals.ticker === selectedStock ? (
           <div className="space-y-4">
@@ -900,7 +1044,7 @@ const TradeLens = () => {
                 <span className="text-xxs text-tl-tertiary">{fundamentals.industry}</span>
               </div>
             </div>
-            
+
             {/* Metrics Grid */}
             <div className="grid grid-cols-3 gap-2">
               <div className="tl-metric-card">
@@ -928,7 +1072,7 @@ const TradeLens = () => {
                 <span className="tl-metric-value text-tl-negative">${fundamentals['52w_low']?.toFixed(0) || '--'}</span>
               </div>
             </div>
-            
+
             {/* 52 Week Range Bar */}
             {fundamentals['52w_high'] && fundamentals['52w_low'] && currentPrice && (
               <div className="mt-3">
@@ -938,13 +1082,13 @@ const TradeLens = () => {
                   <span>${fundamentals['52w_high']?.toFixed(0)}</span>
                 </div>
                 <div className="relative h-2 bg-tl-surface rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="absolute h-full bg-gradient-to-r from-tl-negative via-tl-smart to-tl-positive rounded-full"
                     style={{ width: '100%' }}
                   />
-                  <div 
+                  <div
                     className="absolute w-1 h-4 bg-tl-smoke rounded-full -top-1 shadow-md"
-                    style={{ 
+                    style={{
                       left: `${Math.min(100, Math.max(0, ((currentPrice - fundamentals['52w_low']) / (fundamentals['52w_high'] - fundamentals['52w_low'])) * 100))}%`,
                       transform: 'translateX(-50%)'
                     }}
@@ -952,7 +1096,7 @@ const TradeLens = () => {
                 </div>
               </div>
             )}
-            
+
             {/* Description */}
             {fundamentals.description && (
               <div className="pt-3 border-t border-tl-border-subtle">
@@ -1068,7 +1212,7 @@ const TradeLens = () => {
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={handleRunPrediction}
                 disabled={loadingPrediction || selectedFeatures.length === 0}
                 className="w-full tl-btn-primary py-2.5 flex items-center justify-center gap-2"
@@ -1116,9 +1260,9 @@ const TradeLens = () => {
                       <div className="flex items-center gap-2">
                         <span className="tl-metric-value">{prediction.metrics.rmse.toFixed(2)}</span>
                         <div className="flex-1 tl-progress">
-                          <div 
-                            className="tl-progress-bar tl-progress-positive" 
-                            style={{ width: `${Math.max(0, 100 - prediction.metrics.rmse * 5)}%` }} 
+                          <div
+                            className="tl-progress-bar tl-progress-positive"
+                            style={{ width: `${Math.max(0, 100 - prediction.metrics.rmse * 5)}%` }}
                           />
                         </div>
                       </div>
@@ -1128,9 +1272,9 @@ const TradeLens = () => {
                       <div className="flex items-center gap-2">
                         <span className="tl-metric-value">{prediction.metrics.directional_accuracy.toFixed(0)}%</span>
                         <div className="flex-1 tl-progress">
-                          <div 
-                            className="tl-progress-bar tl-progress-neutral" 
-                            style={{ width: `${prediction.metrics.directional_accuracy}%` }} 
+                          <div
+                            className="tl-progress-bar tl-progress-neutral"
+                            style={{ width: `${prediction.metrics.directional_accuracy}%` }}
                           />
                         </div>
                       </div>
@@ -1149,9 +1293,9 @@ const TradeLens = () => {
                             <div key={feature} className="flex items-center gap-2">
                               <span className="font-mono text-xxs text-tl-secondary w-16 truncate">{feature}</span>
                               <div className="flex-1 tl-progress h-1">
-                                <div 
-                                  className="h-full rounded-full bg-tl-smart" 
-                                  style={{ width: `${importance * 100}%` }} 
+                                <div
+                                  className="h-full rounded-full bg-tl-smart"
+                                  style={{ width: `${importance * 100}%` }}
                                 />
                               </div>
                               <span className="font-mono text-xxs text-tl-tertiary w-10 text-right">
@@ -1195,18 +1339,18 @@ const TradeLens = () => {
 
     const sendMessage = async () => {
       if (!input.trim() || isLoading) return;
-      
+
       const userMessage = input;
       setInput('');
-      
+
       // Add user message immediately
       const newMessages = [...messages, { role: 'user', content: userMessage }];
       setMessages(newMessages);
-      
+
       // Add loading indicator
       setIsLoading(true);
       setMessages([...newMessages, { role: 'assistant', content: '...' }]);
-      
+
       try {
         // Call the AI API with conversation history
         const response = await aiAPI.chat({
@@ -1214,14 +1358,14 @@ const TradeLens = () => {
           ticker: selectedTicker || undefined,
           context: selectedTicker ? { ticker: selectedTicker } : undefined
         });
-        
+
         // Replace loading message with actual response
         setMessages([...newMessages, { role: 'assistant', content: response.data.response }]);
       } catch (error) {
         console.error('Error sending message:', error);
-        setMessages([...newMessages, { 
-          role: 'assistant', 
-          content: 'Sorry, I\'m having trouble responding right now. Please make sure the API key is configured correctly.' 
+        setMessages([...newMessages, {
+          role: 'assistant',
+          content: 'Sorry, I\'m having trouble responding right now. Please make sure the API key is configured correctly.'
         }]);
       } finally {
         setIsLoading(false);
@@ -1236,16 +1380,15 @@ const TradeLens = () => {
             <h3 className="text-data-sm font-semibold text-tl-smoke">AI Trading Tutor</h3>
           </div>
         </div>
-        
+
         <div className="tl-panel-body p-0 flex flex-col flex-1">
           <div className="flex-1 overflow-y-auto p-3 space-y-3 tl-scroll-area">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-3 py-2 rounded-lg text-data-xs ${
-                  msg.role === 'user' 
-                    ? 'bg-tl-french text-tl-smoke rounded-br-sm' 
-                    : 'bg-tl-surface text-tl-secondary rounded-bl-sm'
-                }`}>
+                <div className={`max-w-[85%] px-3 py-2 rounded-lg text-data-xs ${msg.role === 'user'
+                  ? 'bg-tl-french text-tl-smoke rounded-br-sm'
+                  : 'bg-tl-surface text-tl-secondary rounded-bl-sm'
+                  }`}>
                   {msg.content}
                 </div>
               </div>
@@ -1803,12 +1946,12 @@ const TradeLens = () => {
               <h3 className="text-data-sm font-semibold text-tl-smoke">Learning Modules</h3>
             </div>
           </div>
-          
+
           <div className="tl-panel-body p-0">
             <div className="divide-y divide-tl-border-subtle">
               {modules.map((module) => (
-                <div 
-                  key={module.id} 
+                <div
+                  key={module.id}
                   onClick={() => setSelectedModule(module.id)}
                   className="p-3 hover:bg-tl-surface-overlay cursor-pointer transition-colors group"
                 >
@@ -1822,11 +1965,10 @@ const TradeLens = () => {
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-xxs text-tl-tertiary">{module.duration}</span>
-                        <span className={`tl-badge ${
-                          module.level === 'Beginner' ? 'tl-badge-positive' : 
-                          module.level === 'Intermediate' ? 'tl-badge-warning' : 
-                          'tl-badge-negative'
-                        }`}>
+                        <span className={`tl-badge ${module.level === 'Beginner' ? 'tl-badge-positive' :
+                          module.level === 'Intermediate' ? 'tl-badge-warning' :
+                            'tl-badge-negative'
+                          }`}>
                           {module.level}
                         </span>
                       </div>
@@ -1848,7 +1990,7 @@ const TradeLens = () => {
       <div className="tl-panel">
         <div className="tl-panel-header">
           <div className="flex items-center gap-3">
-            <button 
+            <button
               onClick={() => {
                 setSelectedModule(null);
                 setActiveSection(0);
@@ -1869,11 +2011,10 @@ const TradeLens = () => {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xxs text-tl-tertiary">{content.duration}</span>
-            <span className={`tl-badge ${
-              content.level === 'Beginner' ? 'tl-badge-positive' : 
-              content.level === 'Intermediate' ? 'tl-badge-warning' : 
-              'tl-badge-negative'
-            }`}>
+            <span className={`tl-badge ${content.level === 'Beginner' ? 'tl-badge-positive' :
+              content.level === 'Intermediate' ? 'tl-badge-warning' :
+                'tl-badge-negative'
+              }`}>
               {content.level}
             </span>
           </div>
@@ -1893,11 +2034,10 @@ const TradeLens = () => {
                   <button
                     key={i}
                     onClick={() => setActiveSection(i)}
-                    className={`px-4 py-2.5 text-data-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
-                      activeSection === i 
-                        ? 'border-tl-smart text-tl-smart bg-tl-surface-overlay' 
-                        : 'border-transparent text-tl-tertiary hover:text-tl-secondary'
-                    }`}
+                    className={`px-4 py-2.5 text-data-xs font-medium whitespace-nowrap border-b-2 transition-colors ${activeSection === i
+                      ? 'border-tl-smart text-tl-smart bg-tl-surface-overlay'
+                      : 'border-transparent text-tl-tertiary hover:text-tl-secondary'
+                      }`}
                   >
                     {i + 1}. {section.heading.split(':')[0]}
                   </button>
@@ -1912,7 +2052,7 @@ const TradeLens = () => {
                 <p className="text-data-xs text-tl-secondary leading-relaxed">
                   {content.sections[activeSection].content}
                 </p>
-                
+
                 {content.sections[activeSection].keyPoints && (
                   <div className="mt-4 p-3 bg-tl-surface rounded-md border border-tl-border-subtle">
                     <h5 className="text-xxs uppercase tracking-wide text-tl-tertiary mb-2 font-semibold">
@@ -1988,10 +2128,9 @@ const TradeLens = () => {
               <div className="flex items-center justify-between">
                 <h4 className="text-data-base font-semibold text-tl-smoke">Knowledge Check</h4>
                 {quizSubmitted && (
-                  <span className={`tl-badge ${
-                    Object.values(quizAnswers).filter((a, i) => a === content.quiz[i].correct).length === content.quiz.length
-                      ? 'tl-badge-positive' : 'tl-badge-warning'
-                  }`}>
+                  <span className={`tl-badge ${Object.values(quizAnswers).filter((a, i) => a === content.quiz[i].correct).length === content.quiz.length
+                    ? 'tl-badge-positive' : 'tl-badge-warning'
+                    }`}>
                     {Object.values(quizAnswers).filter((a, i) => a === content.quiz[i].correct).length} / {content.quiz.length} Correct
                   </span>
                 )}
@@ -2007,23 +2146,22 @@ const TradeLens = () => {
                       const isSelected = quizAnswers[qIndex] === oIndex;
                       const isCorrect = oIndex === q.correct;
                       const showResult = quizSubmitted;
-                      
+
                       return (
                         <button
                           key={oIndex}
-                          onClick={() => !quizSubmitted && setQuizAnswers({...quizAnswers, [qIndex]: oIndex})}
+                          onClick={() => !quizSubmitted && setQuizAnswers({ ...quizAnswers, [qIndex]: oIndex })}
                           disabled={quizSubmitted}
-                          className={`w-full text-left p-3 rounded-md border transition-all text-data-xs ${
-                            showResult
-                              ? isCorrect
-                                ? 'bg-tl-positive-muted border-tl-positive text-tl-positive'
-                                : isSelected
-                                  ? 'bg-tl-negative-muted border-tl-negative text-tl-negative'
-                                  : 'bg-tl-surface border-tl-border-subtle text-tl-tertiary'
+                          className={`w-full text-left p-3 rounded-md border transition-all text-data-xs ${showResult
+                            ? isCorrect
+                              ? 'bg-tl-positive-muted border-tl-positive text-tl-positive'
                               : isSelected
-                                ? 'bg-tl-smart/20 border-tl-smart text-tl-smoke'
-                                : 'bg-tl-surface-overlay border-tl-border hover:border-tl-smart/50 text-tl-secondary'
-                          }`}
+                                ? 'bg-tl-negative-muted border-tl-negative text-tl-negative'
+                                : 'bg-tl-surface border-tl-border-subtle text-tl-tertiary'
+                            : isSelected
+                              ? 'bg-tl-smart/20 border-tl-smart text-tl-smoke'
+                              : 'bg-tl-surface-overlay border-tl-border hover:border-tl-smart/50 text-tl-secondary'
+                            }`}
                         >
                           <span className="font-mono mr-2">{String.fromCharCode(65 + oIndex)}.</span>
                           {option}
@@ -2098,7 +2236,7 @@ const TradeLens = () => {
               </div>
               <span className="hidden sm:inline-flex tl-badge tl-badge-neutral">Quant EdTech</span>
             </div>
-            
+
             {/* Right: Search + Live Indicator */}
             <div className="flex items-center gap-4">
               {/* Search */}
@@ -2113,7 +2251,7 @@ const TradeLens = () => {
                   className="w-full pl-9 pr-4 py-2 bg-tl-surface border border-tl-border rounded-md text-data-sm font-mono text-tl-smoke placeholder-tl-text-muted focus:outline-none focus:border-tl-smart focus:ring-1 focus:ring-tl-smart transition-all"
                 />
               </div>
-              
+
               {/* Live Indicator */}
               <div className="hidden sm:flex items-center gap-2 text-xxs">
                 <div className="tl-indicator tl-indicator-positive tl-indicator-pulse" />
@@ -2133,9 +2271,8 @@ const TradeLens = () => {
               <button
                 key={view.id}
                 onClick={() => setActiveView(view.id)}
-                className={`tl-nav-item whitespace-nowrap ${
-                  activeView === view.id ? 'tl-nav-item-active' : 'tl-nav-item-inactive'
-                }`}
+                className={`tl-nav-item whitespace-nowrap ${activeView === view.id ? 'tl-nav-item-active' : 'tl-nav-item-inactive'
+                  }`}
               >
                 {view.label}
               </button>
@@ -2226,7 +2363,7 @@ const TradeLens = () => {
           </div>
         </div>
       </footer>
-      
+
       {/* Bottom padding for footer */}
       <div className="h-8" />
     </div>

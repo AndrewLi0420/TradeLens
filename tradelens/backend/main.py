@@ -439,6 +439,10 @@ async def get_news(ticker: str, limit: int = 10):
 # ============================================================================
 
 from llm_service import llm_service
+from sentiment_pipeline import sentiment_router
+
+# Mount sentiment router for FinBERT-based sentiment analysis
+app.include_router(sentiment_router)
 
 @app.post("/api/ai/explain-movement")
 async def explain_movement(request: AIExplainRequest):
